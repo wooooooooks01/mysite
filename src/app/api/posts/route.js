@@ -1,32 +1,23 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
-
-const DATA_FILE = path.join(process.cwd(), "data", "posts.json");
-
-function ensureDataDir() {
-  const dir = path.dirname(DATA_FILE);
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  if (!fs.existsSync(DATA_FILE)) fs.writeFileSync(DATA_FILE, "[]", "utf-8");
-}
-
-function readPosts() {
-  ensureDataDir();
-  return JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
-}
-
-function writePosts(posts) {
-  ensureDataDir();
-  fs.writeFileSync(DATA_FILE, JSON.stringify(posts, null, 2), "utf-8");
-}
+import { supabase } from "@/lib/supabase";
 
 // GET: 포스트 목록 조회
 export async function GET() {
-  return NextResponse.json(readPosts());
+  try {
+    const { data, error } = await supabase
+      .from("posts")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return NextResponse.json(data || []);
+  } catch (e) {
+    console.error("GET posts error:", e);
+    return NextResponse.json([], { status: 200 });
+  }
 }
 
 // POST: 새 포스트 작성
-// blocks: [{ type: "text", content: "..." }, { type: "image", url: "/uploads/xxx.jpg" }]
 export async function POST(request) {
   try {
     const { title, blocks } = await request.json();
@@ -34,19 +25,22 @@ export async function POST(request) {
       return NextResponse.json({ error: "제목과 내용은 필수입니다." }, { status: 400 });
     }
 
-    const posts = readPosts();
     const newPost = {
-      id: Date.now().toString(),
       title,
       blocks,
       date: new Date().toISOString().split("T")[0].replace(/-/g, "."),
-      createdAt: new Date().toISOString(),
     };
 
-    posts.unshift(newPost);
-    writePosts(posts);
-    return NextResponse.json(newPost, { status: 201 });
-  } catch {
+    const { data, error } = await supabase
+      .from("posts")
+      .insert(newPost)
+      .select()
+      .single();
+
+    if (error) throw error;
+    return NextResponse.json(data, { status: 201 });
+  } catch (e) {
+    console.error("POST error:", e);
     return NextResponse.json({ error: "서버 오류" }, { status: 500 });
   }
 }
@@ -58,11 +52,15 @@ export async function DELETE(request) {
     const id = searchParams.get("id");
     if (!id) return NextResponse.json({ error: "ID 필요" }, { status: 400 });
 
-    let posts = readPosts();
-    posts = posts.filter((p) => p.id !== id);
-    writePosts(posts);
+    const { error } = await supabase
+      .from("posts")
+      .delete()
+      .eq("id", id);
+
+    if (error) throw error;
     return NextResponse.json({ success: true });
-  } catch {
+  } catch (e) {
+    console.error("DELETE error:", e);
     return NextResponse.json({ error: "서버 오류" }, { status: 500 });
   }
 }

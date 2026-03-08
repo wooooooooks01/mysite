@@ -1,6 +1,5 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
+import { supabase } from "@/lib/supabase";
 
 export async function POST(request) {
   try {
@@ -18,15 +17,22 @@ export async function POST(request) {
     const ext = file.name.split(".").pop();
     const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
 
-    const uploadDir = path.join(process.cwd(), "public", "uploads");
-    if (!fs.existsSync(uploadDir)) {
-      fs.mkdirSync(uploadDir, { recursive: true });
-    }
+    // Supabase Storage에 업로드
+    const { data, error } = await supabase.storage
+      .from("images")
+      .upload(filename, buffer, {
+        contentType: file.type,
+        upsert: false,
+      });
 
-    const filepath = path.join(uploadDir, filename);
-    fs.writeFileSync(filepath, buffer);
+    if (error) throw error;
 
-    return NextResponse.json({ url: `/uploads/${filename}` });
+    // 공개 URL 가져오기
+    const { data: publicUrl } = supabase.storage
+      .from("images")
+      .getPublicUrl(data.path);
+
+    return NextResponse.json({ url: publicUrl.publicUrl });
   } catch (error) {
     console.error("Upload error:", error);
     return NextResponse.json({ error: "업로드 실패" }, { status: 500 });
