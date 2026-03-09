@@ -100,9 +100,13 @@ export default function LogPage() {
       if (res.ok) {
         setExpandedId(null);
         fetchPosts();
+      } else {
+        const data = await res.json();
+        alert(`삭제 실패: ${data.error || "알 수 없는 오류"}`);
       }
     } catch (e) {
       console.error("Delete error:", e);
+      alert("삭제 중 서버 통신 오류가 발생했습니다.");
     } finally {
       setDeleteTargetId(null);
     }
